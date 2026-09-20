@@ -1,0 +1,13 @@
+services:
+  ros2-core:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ros2-jazzy-dev:latest
+    container_name: ros2_jazzy_core
+    network_mode: host
+    ipc: host
+    volumes:
+      - ../jazzy_ws:/jazzy_ws
+    stdin_open: true
+    tty: true

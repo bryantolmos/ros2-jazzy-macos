@@ -1,0 +1,19 @@
+/**:
+  bridge_node:
+    ros__parameters:
+      zenoh_listen_endpoint: "tcp/0.0.0.0:7447"
+      zenoh_state_key: "mujoco/sim/joint_states"
+      zenoh_cmd_key: "mujoco/sim/cmd_torque"
+      joint_name: "hinge"
+      frame_id: "world"
+
+  controller_node:
+    ros__parameters:
+      target_angle: 0.0
+      kp: 45.0
+      kd: 6.5
+      max_torque: 10.0
+      push_duration: 0.35
+      push_torque: 8.0
+      free_duration: 8.0
+      stabilize_duration: 8.0

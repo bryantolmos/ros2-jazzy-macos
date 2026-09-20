@@ -1,0 +1,19 @@
+# macOS metadata
+.DS_Store
+
+# python caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# python virtual environment
+macos_sim/venv/
+
+# ros2 colcon build artifacts
+jazzy_ws/build/
+jazzy_ws/install/
+jazzy_ws/log/
+
+# docker build caches
+.docker/
