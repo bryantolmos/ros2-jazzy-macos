@@ -12,10 +12,10 @@ A free and open-source stack for running **ROS 2 Jazzy** inside an isolated Linu
 5. [Running ROS 2 Commands Easily](#running-ros-2-commands-easily)
 6. [Software Stack](#software-stack)
    - [The Apple Silicon Robotics Bottleneck](#the-apple-silicon-robotics-bottleneck)
-   - [The Hybrid Split Architecture](#the-hybrid-split-architecture)
+   - [The Split Architecture](#the-split-architecture)
    - [Virtualization: Colima, Apple VZ, and VirtioFS](#virtualization-colima-apple-vz-and-virtiofs)
    - [Communication: Why Zenoh Over Standard DDS](#communication-why-zenoh-over-standard-dds)
-   - [Window Management & The macOS Main Thread (`mjpython`)](#window-management--the-macos-main-thread-mjpython)
+   - [Window Management & macOS Main Thread (`mjpython`)](#window-management--macos-main-thread-mjpython)
    - [ROS 2 Package Architecture & QoS Design](#ros-2-package-architecture--qos-design)
 7. [Troubleshooting](#troubleshooting)
 8. [Licenses](#licenses)
@@ -24,15 +24,15 @@ A free and open-source stack for running **ROS 2 Jazzy** inside an isolated Linu
 
 ## Quick Overview
 
-Tradeoffs of running robotics on Apple Silicon:
-* **Full Linux VMs** heavy battery usage and have zero access to the M-series GPU cores.
-* **Docker with VNC or XQuartz** forces 3D simulation to render via Mesa `llvmpipe` (CPU software rasterization), causing severe stuttering and frame drops.
-* **Native macOS ROS 2 builds** lack support for Linux-specific drivers, hardware interfaces (like SocketCAN or V4L2), and strict Debian `apt` dependencies.
+**RUNNING ROBOTICS ON APPLE SILICONE**
+* **Linux VMs** heavy battery usage and zero access to the M-series GPU cores.
+* **Docker with VNC or XQuartz** uses Mesa 3D graphics causing stuttering and frame drops.
+* **Native macOS ROS 2 builds** lack support for Linux-specific drivers, hardware interfaces, and `apt` dependencies.
 
-This stack solves the problem with a clean divisions:**
-* **ROS 2 Compute Layer (Ubuntu 24.04 ARM64 Container)**: Runs controllers, planners, nodes, and build tooling inside a Colima-managed container that matches target Linux deployment hardware.
-* **Simulation & Graphics Layer (Native macOS Darwin)**: Runs MuJoCo natively on the host, tapping directly into the M-series GPU via Metal and Cocoa.
-* **Communication (Eclipse Zenoh)**: Streams joint telemetry and control efforts over a dedicated local TCP socket with sub-millisecond round-trip times at 400–500 Hz.
+**THIS SOFTWARE STACK**
+* **ROS 2 Compute Layer (Ubuntu 24.04 ARM64 Container)**: Runs controllers, planners, nodes, and build tooling inside a Colima-managed container that matches Linux deployment hardware.
+* **Simulation & Graphics Layer (Native macOS)**: Runs MuJoCo natively on the host, using M-series chip GPU via Cocoa.
+* **Communication (Eclipse Zenoh)**: Streams joint telemetry and control efforts over a dedicated local TCP socket at ~400 Hz.
 
 ---
 
@@ -66,7 +66,7 @@ colima list
 ### 2. Build and Launch the ROS 2 Container
 ```bash
 cd ~/Desktop/ros2/docker
-docker compose up -d --build
+docker-compose up -d --build
 ```
 
 ### 3. Build the ROS 2 Workspace
@@ -78,7 +78,7 @@ docker exec -it -w /jazzy_ws ros2_jazzy_core bash -c "source /opt/ros/jazzy/setu
 ### 4. Setup the Native macOS Python Environment
 In a native macOS terminal, create a virtual environment for MuJoCo:
 ```bash
-cd ~/Desktop/ros2/macos_sim
+cd ~/ros2-jazzy-macos/macos_sim
 /opt/homebrew/opt/python@3.11/bin/python3.11 -m venv venv
 source venv/bin/activate
 pip install --upgrade pip
@@ -203,16 +203,16 @@ flowchart TB
 ```
 
 ### The Apple Silicon Robotics Bottleneck
-ROS 2 development on modern Apple hardware typically runs into a architectural conflicts:
-1. ROS 2 relies heavily on the Linux ecosystem (Debian packages, systemd, glibc, Linux network stack).
+ROS 2 development on modern Apple hardware runs into a architectural conflicts:
+1. ROS 2 relies heavily on the Linux ecosystem
 2. macOS hypervisors cannot pass Apple Silicon GPU acceleration through to Linux container runtimes.
-3. Running 3D simulation tools inside Linux containers on macOS forces software-based rendering, turning the CPU into an inefficient graphics processor and starving control loops of compute.
+3. Running 3D simulation tools inside Linux containers on macOS forces software-based rendering, turning the CPU into an inefficient graphics processor and reducing compute.
 4. X11 socket forwarding (XQuartz) or remote desktop streams (VNC/noVNC) introduce network buffering lag, frame dropping, and poor refresh rates.
 
-### The Hybrid Split Architecture
+### The Split Architecture
 To bypass this limitation entirely, the architecture decouples graphics and physics from the control stack:
-* **Physics & Visualization** runs natively as a Darwin executable on macOS, taking direct advantage of unified memory and Metal GPU cores.
-* **Control, Estimation, and ROS 2 Graph Management** runs inside an isolated Ubuntu 24.04 ARM64 container, guaranteeing binary compatibility with production Linux targets (such as an NVIDIA Jetson).
+* **Physics & Visualization** runs natively on macOS, taking advantage of unified memory and GPU cores.
+* **Control, Estimation, and ROS 2 Graph Management** runs inside an isolated Ubuntu 24.04 ARM64 container, guaranteeing compatibility with production Linux targets.
 
 ### Virtualization: Colima, Apple VZ, and VirtioFS
 To keep the toolchain 100% open-source and free for commercial use, the container runtime is built on **Colima** (MIT licensed) rather than Docker Desktop:
@@ -221,7 +221,7 @@ To keep the toolchain 100% open-source and free for commercial use, the containe
 * `--network-address`: Allocates an explicit, routable bridge IP to the Colima virtual machine, enabling host processes to communicate directly with container ports.
 
 ### Communication: Why Zenoh Over Standard DDS?
-Standard ROS 2 uses **DDS (Data Distribution Service)** (FastDDS, CycloneDDS), which relies heavily on UDP multicast discovery to find neighboring nodes.
+Standard ROS 2 uses **DDS (Data Distribution Service)**, which relies heavily on UDP multicast discovery to find neighboring nodes.
 * Across the macOS-to-VM virtualization boundary, UDP multicast packets are frequently blocked or dropped by internal NAT network bridges.
 * Configuring DDS unicast peering across platforms requires complex XML configuration files that break whenever an interface or IP changes.
 
@@ -231,7 +231,7 @@ Standard ROS 2 uses **DDS (Data Distribution Service)** (FastDDS, CycloneDDS), w
 * The native macOS Python simulation script acts as a **Zenoh client**, connecting over standard TCP.
 * Telemetry and actuator commands travel across this socket at ~400 Hz.
 
-### Window Management & The macOS Main Thread (`mjpython`)
+### Window Management & macOS Main Thread (`mjpython`)
 Launching MuJoCo's interactive viewer on macOS using the standard Python interpreter (`python sim_bridge.py`) triggers a runtime crash:
 ```text
 RuntimeError: `launch_passive` requires that the Python script be run under `mjpython` on macOS
